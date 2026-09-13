@@ -69,42 +69,32 @@ class TelegramAccessibilityService : AccessibilityService() {
         val cleanTexts = texts.filter { it.isNotBlank() }.map { it.trim().lowercase() }
         if (cleanTexts.isEmpty()) return
         
-        // Find the likely title based on standard Android Action Bar patterns.
-        // Usually, the back button is the first item, and the title is next.
-        var titleIndex = 0
-        if (cleanTexts.isNotEmpty() && (cleanTexts[0] == "go back" || cleanTexts[0] == "back" || cleanTexts[0].contains("back"))) {
-            titleIndex = 1
-        }
+        // 1. Identify if we are inside a chat/channel screen
+        val isChatScreenById = !rootNode.findAccessibilityNodeInfosByViewId("org.telegram.messenger:id/chat_message_edit").isNullOrEmpty() ||
+                               !rootNode.findAccessibilityNodeInfosByViewId("org.telegram.messenger:id/bottom_overlay_chat_text").isNullOrEmpty()
         
-        val likelyTitle = if (cleanTexts.size > titleIndex) cleanTexts[titleIndex] else ""
+        val hasChatInputText = cleanTexts.any { it == "message" || it == "broadcast" || it == "join" || it == "mute" || it == "unmute" || it == "discuss" }
+        val hasBackButton = cleanTexts.any { it == "go back" || it == "back" || it.contains("back") }
         
-        // Allow main screens
-        if (likelyTitle == "telegram" || likelyTitle == "chats" || likelyTitle == "settings" || likelyTitle == "contacts" || likelyTitle == "edit" || likelyTitle.contains("navigation")) {
+        val isChat = isChatScreenById || (hasChatInputText && hasBackButton)
+
+        if (!isChat) {
+            // Not a chat screen (likely main menu, settings, etc.). Allow navigation.
             return
         }
+
+        // 2. We are in a chat. Check if it's an allowed channel.
+        // To handle differences like "@JEEPhysics" vs "JEE Physics", we strip spaces and special characters.
+        val screenTextCombined = cleanTexts.joinToString(" ") { it.replace(Regex("[^a-z0-9]"), "") }
         
-        // Check if the likely title matches an allowed channel
         val isAllowed = currentAllowedChannels.any { allowed ->
-            val cleanAllowed = allowed.replace("@", "").trim().lowercase()
-            likelyTitle == cleanAllowed || likelyTitle.contains(cleanAllowed) ||
-            cleanTexts.take(3).any { it.contains(cleanAllowed) } // Fallback check in top texts
+            val cleanAllowed = allowed.replace(Regex("[^a-z0-9]"), "").trim().lowercase()
+            if (cleanAllowed.isEmpty()) return@any false
+            screenTextCombined.contains(cleanAllowed)
         }
         
-        // Identify if it's a chat screen (chat screens have "message", "mute", "unmute", "broadcast", "join" or back button)
-        val hasChatIndicators = cleanTexts.any { it == "message" || it == "mute" || it == "unmute" || it == "join" || it == "broadcast" } || titleIndex == 1
-        
         if (!isAllowed) {
-            if (isStrictMode) {
-                // In strict mode, if we suspect it's a chat screen and not allowed, block it.
-                if (hasChatIndicators && likelyTitle.isNotEmpty()) {
-                    blockApp()
-                }
-            } else {
-                // In normal mode, only block if we are very confident it's a non-allowed chat.
-                if (hasChatIndicators && likelyTitle.isNotEmpty()) {
-                    blockApp()
-                }
-            }
+            blockApp()
         }
     }
     
@@ -125,6 +115,7 @@ class TelegramAccessibilityService : AccessibilityService() {
     }
 
     private fun blockApp() {
+        performGlobalAction(GLOBAL_ACTION_HOME)
         val intent = Intent(this, BlockActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         startActivity(intent)

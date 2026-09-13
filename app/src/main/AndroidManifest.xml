@@ -31,7 +31,9 @@
         <activity
             android:name=".ui.BlockActivity"
             android:exported="false"
-            android:launchMode="singleTask"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
             android:theme="@style/Theme.MyApplication" />
 
         <service
