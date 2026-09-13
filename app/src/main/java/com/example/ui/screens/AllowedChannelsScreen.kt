@@ -107,7 +107,7 @@ fun AllowedChannelsScreen(viewModel: MainViewModel) {
                 title = { Text("Add Channel") },
                 text = {
                     Column {
-                        Text("Enter the exact channel name or @handle to allow.")
+                        Text("Enter the exact channel name or @handle to allow.\n\nTip: You can also open a channel in Telegram and \"Share\" its link directly to this app!")
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = newChannelName,

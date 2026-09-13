@@ -63,52 +63,67 @@ class TelegramAccessibilityService : AccessibilityService() {
     }
     
     private fun checkNodeAndBlock(rootNode: AccessibilityNodeInfo) {
-        val titleText = findChatTitle(rootNode)
-        val isChatScreen = isChatScreen(rootNode)
+        val texts = mutableListOf<String>()
+        extractTexts(rootNode, texts)
         
-        if (titleText != null) {
-            val titleLower = titleText.trim().lowercase()
-            
-            // Ignore the main app title which might just be "Telegram" or "Chats"
-            if (titleLower == "telegram" || titleLower == "chats") {
-                return 
-            }
-            
-            val isAllowed = currentAllowedChannels.any { allowed ->
-                val cleanAllowed = allowed.replace("@", "").trim().lowercase()
-                titleLower == cleanAllowed || titleLower.contains(cleanAllowed)
-            }
-            
-            if (!isAllowed) {
-                // Positively identified a non-allowed channel
-                blockApp()
-            }
-        } else {
-            // Couldn't positively identify channel.
+        val cleanTexts = texts.filter { it.isNotBlank() }.map { it.trim().lowercase() }
+        if (cleanTexts.isEmpty()) return
+        
+        // Find the likely title based on standard Android Action Bar patterns.
+        // Usually, the back button is the first item, and the title is next.
+        var titleIndex = 0
+        if (cleanTexts.isNotEmpty() && (cleanTexts[0] == "go back" || cleanTexts[0] == "back" || cleanTexts[0].contains("back"))) {
+            titleIndex = 1
+        }
+        
+        val likelyTitle = if (cleanTexts.size > titleIndex) cleanTexts[titleIndex] else ""
+        
+        // Allow main screens
+        if (likelyTitle == "telegram" || likelyTitle == "chats" || likelyTitle == "settings" || likelyTitle == "contacts" || likelyTitle == "edit" || likelyTitle.contains("navigation")) {
+            return
+        }
+        
+        // Check if the likely title matches an allowed channel
+        val isAllowed = currentAllowedChannels.any { allowed ->
+            val cleanAllowed = allowed.replace("@", "").trim().lowercase()
+            likelyTitle == cleanAllowed || likelyTitle.contains(cleanAllowed) ||
+            cleanTexts.take(3).any { it.contains(cleanAllowed) } // Fallback check in top texts
+        }
+        
+        // Identify if it's a chat screen (chat screens have "message", "mute", "unmute", "broadcast", "join" or back button)
+        val hasChatIndicators = cleanTexts.any { it == "message" || it == "mute" || it == "unmute" || it == "join" || it == "broadcast" } || titleIndex == 1
+        
+        if (!isAllowed) {
             if (isStrictMode) {
-                // In strict mode, if we are in a chat view but can't identify the title, block it.
-                // We shouldn't block everything, or the user can't navigate to the allowed channels.
-                if (isChatScreen) {
+                // In strict mode, if we suspect it's a chat screen and not allowed, block it.
+                if (hasChatIndicators && likelyTitle.isNotEmpty()) {
+                    blockApp()
+                }
+            } else {
+                // In normal mode, only block if we are very confident it's a non-allowed chat.
+                if (hasChatIndicators && likelyTitle.isNotEmpty()) {
                     blockApp()
                 }
             }
         }
     }
     
-    private fun findChatTitle(node: AccessibilityNodeInfo): String? {
-        val titleNodes = node.findAccessibilityNodeInfosByViewId("org.telegram.messenger:id/action_bar_title")
-        if (!titleNodes.isNullOrEmpty()) {
-            return titleNodes[0].text?.toString()
+    private fun extractTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
+        if (node.text != null && node.text.isNotBlank()) {
+            list.add(node.text.toString())
+        } else if (node.contentDescription != null && node.contentDescription.isNotBlank()) {
+            list.add(node.contentDescription.toString())
         }
-        return null
+        
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                extractTexts(child, list)
+                child.recycle()
+            }
+        }
     }
 
-    private fun isChatScreen(node: AccessibilityNodeInfo): Boolean {
-        // Look for the message input box, which indicates we are in a chat screen.
-        val inputNodes = node.findAccessibilityNodeInfosByViewId("org.telegram.messenger:id/chat_message_edit")
-        return !inputNodes.isNullOrEmpty()
-    }
-    
     private fun blockApp() {
         val intent = Intent(this, BlockActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
