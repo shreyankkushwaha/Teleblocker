@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Focus Blocker</string>
+    <string name="accessibility_service_description">Used to detect which Telegram channel is currently open so it can block distracting channels.</string>
+</resources>

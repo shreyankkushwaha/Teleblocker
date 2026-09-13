@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Focus Blocker",
+  "description": "Productivity app that blocks Telegram unless you are in an allowed channel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
