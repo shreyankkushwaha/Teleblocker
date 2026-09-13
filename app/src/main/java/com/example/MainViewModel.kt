@@ -45,11 +45,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = "This Telegram channel is not on the allowed list."
         )
 
-    fun addChannel(name: String) {
+    fun addChannel(name: String, type: String = "telegram") {
         val cleanName = name.trim()
         if (cleanName.isNotEmpty()) {
             viewModelScope.launch {
-                channelRepository.insertChannel(AllowedChannel(name = cleanName))
+                channelRepository.insertChannel(AllowedChannel(name = cleanName, type = type))
             }
         }
     }

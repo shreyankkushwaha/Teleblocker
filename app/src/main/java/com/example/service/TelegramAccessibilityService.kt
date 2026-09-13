@@ -23,7 +23,8 @@ class TelegramAccessibilityService : AccessibilityService() {
     private lateinit var channelRepository: ChannelRepository
     private lateinit var settingsRepository: SettingsRepository
 
-    private var currentAllowedChannels: List<String> = emptyList()
+    private var currentTelegramChannels: List<String> = emptyList()
+    private var currentYoutubeChannels: List<String> = emptyList()
     private var isProtectionEnabled: Boolean = false
     private var isStrictMode: Boolean = true
 
@@ -35,7 +36,8 @@ class TelegramAccessibilityService : AccessibilityService() {
 
         scope.launch {
             channelRepository.allChannels.collect { channels ->
-                currentAllowedChannels = channels.map { it.name.trim().lowercase() }
+                currentTelegramChannels = channels.filter { it.type == "telegram" }.map { it.name.trim().lowercase() }
+                currentYoutubeChannels = channels.filter { it.type == "youtube" }.map { it.name.trim().lowercase() }
             }
         }
         scope.launch {
@@ -54,15 +56,23 @@ class TelegramAccessibilityService : AccessibilityService() {
         if (!isProtectionEnabled || event == null) return
 
         val packageName = event.packageName?.toString() ?: return
-        if (packageName != "org.telegram.messenger" && packageName != "org.thunderdog.challegram") {
+        val isTelegram = packageName == "org.telegram.messenger" || packageName == "org.thunderdog.challegram"
+        val isYoutube = packageName == "com.google.android.youtube" || packageName == "com.google.android.apps.youtube.kids"
+
+        if (!isTelegram && !isYoutube) {
             return
         }
 
         val rootNode = rootInActiveWindow ?: return
-        checkNodeAndBlock(rootNode)
+        
+        if (isTelegram) {
+            checkTelegramAndBlock(rootNode)
+        } else if (isYoutube) {
+            checkYoutubeAndBlock(rootNode)
+        }
     }
     
-    private fun checkNodeAndBlock(rootNode: AccessibilityNodeInfo) {
+    private fun checkTelegramAndBlock(rootNode: AccessibilityNodeInfo) {
         val texts = mutableListOf<String>()
         extractTexts(rootNode, texts)
         
@@ -84,15 +94,46 @@ class TelegramAccessibilityService : AccessibilityService() {
         }
 
         // 2. We are in a chat. Check if it's an allowed channel.
-        // To handle differences like "@JEEPhysics" vs "JEE Physics", we strip spaces and special characters.
         val screenTextCombined = cleanTexts.joinToString(" ") { it.replace(Regex("[^a-z0-9]"), "") }
         
-        val isAllowed = currentAllowedChannels.any { allowed ->
+        val isAllowed = currentTelegramChannels.any { allowed ->
             val cleanAllowed = allowed.replace(Regex("[^a-z0-9]"), "").trim().lowercase()
             if (cleanAllowed.isEmpty()) return@any false
             screenTextCombined.contains(cleanAllowed)
         }
         
+        if (!isAllowed) {
+            blockApp()
+        }
+    }
+
+    private fun checkYoutubeAndBlock(rootNode: AccessibilityNodeInfo) {
+        val texts = mutableListOf<String>()
+        extractTexts(rootNode, texts)
+        
+        val cleanTexts = texts.filter { it.isNotBlank() }.map { it.trim().lowercase() }
+        if (cleanTexts.isEmpty()) return
+
+        // 1. Check if we are on a YouTube video/channel page.
+        // We look for common YouTube UI texts like "subscribe", "subscribers", "views"
+        val isVideoOrChannelScreen = cleanTexts.any { it == "subscribe" || it == "subscribed" || it.contains("subscribers") || it.contains("views") }
+
+        if (!isVideoOrChannelScreen) {
+            // Probably Home feed or search, we might block everything else if strict,
+            // but usually we want to allow navigation and only block videos that are not allowed.
+            // Let's allow home screen but wait for a video to be clicked.
+            return
+        }
+
+        // 2. We are on a video or channel screen. Check if it's an allowed channel.
+        val screenTextCombined = cleanTexts.joinToString(" ") { it.replace(Regex("[^a-z0-9]"), "") }
+
+        val isAllowed = currentYoutubeChannels.any { allowed ->
+            val cleanAllowed = allowed.replace(Regex("[^a-z0-9]"), "").trim().lowercase()
+            if (cleanAllowed.isEmpty()) return@any false
+            screenTextCombined.contains(cleanAllowed)
+        }
+
         if (!isAllowed) {
             blockApp()
         }

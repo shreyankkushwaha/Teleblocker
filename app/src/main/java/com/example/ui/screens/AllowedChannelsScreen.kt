@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import com.example.MainViewModel
 import com.example.data.AllowedChannel
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.TextButton
 
 @Composable
@@ -43,9 +45,13 @@ fun AllowedChannelsScreen(viewModel: MainViewModel) {
     val allChannels by viewModel.allChannels.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    
+    val tabs = listOf("Telegram", "YouTube")
+    val selectedType = if (selectedTabIndex == 0) "telegram" else "youtube"
 
     val filteredChannels = allChannels.filter { 
-        it.name.contains(searchQuery, ignoreCase = true)
+        it.type == selectedType && it.name.contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -59,42 +65,53 @@ fun AllowedChannelsScreen(viewModel: MainViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
         ) {
             Text(
                 text = "Allowed Channels",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp)
             )
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Search channels") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                singleLine = true
-            )
-
-            if (filteredChannels.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No channels found.")
+            
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title) }
+                    )
                 }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredChannels, key = { it.id }) { channel ->
-                        ChannelItem(
-                            channel = channel,
-                            onDelete = { viewModel.removeChannel(channel) }
-                        )
+            }
+
+            Column(modifier = Modifier.padding(16.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search channels") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    singleLine = true
+                )
+
+                if (filteredChannels.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No channels found.")
                     }
-                    item {
-                        Spacer(modifier = Modifier.height(80.dp)) // FAB space
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredChannels, key = { it.id }) { channel ->
+                            ChannelItem(
+                                channel = channel,
+                                onDelete = { viewModel.removeChannel(channel) }
+                            )
+                        }
+                        item {
+                            Spacer(modifier = Modifier.height(80.dp)) // FAB space
+                        }
                     }
                 }
             }
@@ -104,10 +121,14 @@ fun AllowedChannelsScreen(viewModel: MainViewModel) {
             var newChannelName by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
-                title = { Text("Add Channel") },
+                title = { Text("Add ${tabs[selectedTabIndex]} Channel") },
                 text = {
                     Column {
-                        Text("Enter the exact channel name or @handle to allow.\n\nTip: You can also open a channel in Telegram and \"Share\" its link directly to this app!")
+                        if (selectedTabIndex == 0) {
+                            Text("Enter the exact channel name or @handle to allow.\n\nTip: You can also open a channel in Telegram and \"Share\" its link directly to this app!")
+                        } else {
+                            Text("Enter the exact YouTube channel name or URL to allow.")
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = newChannelName,
@@ -121,7 +142,7 @@ fun AllowedChannelsScreen(viewModel: MainViewModel) {
                     TextButton(
                         onClick = {
                             if (newChannelName.isNotBlank()) {
-                                viewModel.addChannel(newChannelName)
+                                viewModel.addChannel(newChannelName, selectedType)
                                 showAddDialog = false
                             }
                         }
