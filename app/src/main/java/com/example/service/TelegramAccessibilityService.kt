@@ -114,14 +114,20 @@ class TelegramAccessibilityService : AccessibilityService() {
         val cleanTexts = texts.filter { it.isNotBlank() }.map { it.trim().lowercase() }
         if (cleanTexts.isEmpty()) return
 
-        // 1. Check if we are on a YouTube video/channel page.
-        // We look for common YouTube UI texts like "subscribe", "subscribers", "views"
-        val isVideoOrChannelScreen = cleanTexts.any { it == "subscribe" || it == "subscribed" || it.contains("subscribers") || it.contains("views") }
+        // 1. Check if we are actually on a YouTube video/channel page.
+        // The Home feed often has "views" (e.g., "1M views"), so we avoid using that alone.
+        // Instead, we look for player-specific or channel-specific buttons/labels.
+        val playerIndicators = listOf("pause video", "play video", "enter fullscreen", "exit fullscreen", "collapse")
+        val channelIndicators = listOf("subscribe", "subscribed") // Typically explicit buttons on channel/video pages
 
-        if (!isVideoOrChannelScreen) {
-            // Probably Home feed or search, we might block everything else if strict,
-            // but usually we want to allow navigation and only block videos that are not allowed.
-            // Let's allow home screen but wait for a video to be clicked.
+        val isVideoScreen = !rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/player_view").isNullOrEmpty() ||
+                            !rootNode.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/watch_player").isNullOrEmpty() ||
+                            cleanTexts.any { text -> playerIndicators.any { indicator -> text == indicator } }
+
+        val isChannelScreen = cleanTexts.any { text -> channelIndicators.any { indicator -> text == indicator } }
+
+        if (!isVideoScreen && !isChannelScreen) {
+            // Likely on the Home feed, search results, or Library. Allow navigation.
             return
         }
 
