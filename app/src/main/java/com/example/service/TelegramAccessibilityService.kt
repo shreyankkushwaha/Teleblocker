@@ -162,10 +162,19 @@ class TelegramAccessibilityService : AccessibilityService() {
     }
 
     private fun blockApp() {
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        val intent = Intent(this, BlockActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        startActivity(intent)
+        // Pressing BACK exits the video player before switching apps,
+        // which prevents YouTube from entering Picture-in-Picture (PiP) mode.
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        performGlobalAction(GLOBAL_ACTION_BACK)
+
+        scope.launch {
+            // Slight delay to allow the BACK actions to be processed by the system
+            // before we transition to the BlockActivity.
+            kotlinx.coroutines.delay(300)
+            val intent = Intent(this@TelegramAccessibilityService, BlockActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            startActivity(intent)
+        }
     }
 
     override fun onInterrupt() {}
